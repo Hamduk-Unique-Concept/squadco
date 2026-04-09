@@ -194,7 +194,7 @@ export async function POST(request: NextRequest, { params }: { params: { path?: 
   const key = pathKey(params);
 
   if (key === "api-keys") {
-    if (!hasRole(auth.role, ["bank_admin", "bank_developer"]) || !auth.org_id || !auth.sub) return jsonError("invalid request", requestId, 400);
+    if (!hasRole(auth.role, ["bank_admin", "bank_developer", "super_admin"]) || !auth.org_id || !auth.sub) return jsonError("forbidden", requestId, 403);
     const parsed = z.object({ name: z.string(), environment: z.enum(["sandbox", "production"]).default("sandbox") }).safeParse(body);
     if (!parsed.success) return jsonError("invalid request", requestId, 400);
     const generated = generateApiKey(parsed.data.environment);
