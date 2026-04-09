@@ -1,7 +1,7 @@
 import { createClient } from "./supabase/server";
 
 function getApiUrl() {
-  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+  return process.env.NEXT_PUBLIC_API_URL || process.env.APP_BASE_URL || "http://localhost:3000";
 }
 
 export async function callInternalApi<T>(path: string, init?: RequestInit): Promise<T> {
@@ -13,7 +13,7 @@ export async function callInternalApi<T>(path: string, init?: RequestInit): Prom
     throw new Error("No active Supabase session");
   }
 
-  const response = await fetch(`${getApiUrl()}/internal${path}`, {
+  const response = await fetch(`${getApiUrl()}/api/internal${path}`, {
     ...init,
     headers: {
       "content-type": "application/json",

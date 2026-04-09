@@ -35,6 +35,7 @@ Required env vars:
 
 Use:
 
+- Python version: `3.11`
 - build command: `pip install -r requirements.txt`
 - web start command: `uvicorn main:app --host 0.0.0.0 --port $PORT --workers 4`
 - worker start command: `python worker.py`

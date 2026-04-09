@@ -5,7 +5,7 @@ import { useState } from "react";
 const endpointPresets: Record<string, { method: "GET" | "POST"; path: string; body: string }> = {
   "POST /v1/transaction/analyze": {
     method: "POST",
-    path: "/v1/transaction/analyze",
+    path: "/api/v1/transaction/analyze",
     body: `{
   "customer_id": "55555555-5555-5555-5555-555555555555",
   "amount": 300000,
@@ -18,7 +18,7 @@ const endpointPresets: Record<string, { method: "GET" | "POST"; path: string; bo
   },
   "POST /v1/customer/register": {
     method: "POST",
-    path: "/v1/customer/register",
+    path: "/api/v1/customer/register",
     body: `{
   "external_id": "customer_123",
   "bvn_hash": "hashed_bvn_here",
@@ -27,12 +27,12 @@ const endpointPresets: Record<string, { method: "GET" | "POST"; path: string; bo
   },
   "GET /v1/customer/:external_id/profile": {
     method: "GET",
-    path: "/v1/customer/demo_customer_001/profile",
+    path: "/api/v1/customer/demo_customer_001/profile",
     body: ""
   },
   "POST /v1/credit/analyze": {
     method: "POST",
-    path: "/v1/credit/analyze",
+    path: "/api/v1/credit/analyze",
     body: `{
   "customer_id": "55555555-5555-5555-5555-555555555555",
   "data_type": "bank_statement",
@@ -46,7 +46,7 @@ const endpointPresets: Record<string, { method: "GET" | "POST"; path: string; bo
   },
   "POST /v1/assistant/chat": {
     method: "POST",
-    path: "/v1/assistant/chat",
+    path: "/api/v1/assistant/chat",
     body: `{
   "customer_id": "55555555-5555-5555-5555-555555555555",
   "message": "Why was my transaction flagged?",
@@ -55,7 +55,7 @@ const endpointPresets: Record<string, { method: "GET" | "POST"; path: string; bo
   },
   "POST /v1/webhooks/register": {
     method: "POST",
-    path: "/v1/webhooks/register",
+    path: "/api/v1/webhooks/register",
     body: `{
   "url": "https://bank.example.com/webhooks/trustlayer",
   "events": ["transaction.analyzed"],

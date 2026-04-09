@@ -3,7 +3,7 @@ import { Panel } from "../../../components/shell";
 import { createClient } from "../../../lib/supabase/server";
 
 export default async function PlaygroundPage() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
   const supabase = await createClient();
   const { data: keys } = await supabase
     .from("api_keys")

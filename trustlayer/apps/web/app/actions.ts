@@ -67,7 +67,7 @@ export async function signOutAction() {
 export async function forgotPasswordAction(formData: FormData) {
   const email = String(formData.get("email") || "");
   const supabase = await createClient();
-  const redirectTo = `${process.env.NEXT_PUBLIC_API_URL?.replace(":3001", ":3000") || "http://localhost:3000"}/reset-password`;
+  const redirectTo = `${process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/reset-password`;
   const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
   if (error) {
     redirect(`/forgot-password?error=${encodeURIComponent(error.message)}`);
@@ -385,10 +385,10 @@ export async function acceptInviteAction(formData: FormData) {
     password: String(formData.get("password") || "")
   };
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.APP_BASE_URL || "http://localhost:3000";
 
   try {
-    const response = await fetch(`${apiUrl}/public/invitations/accept`, {
+    const response = await fetch(`${apiUrl}/api/public/invitations/accept`, {
       method: "POST",
       headers: {
         "content-type": "application/json"
