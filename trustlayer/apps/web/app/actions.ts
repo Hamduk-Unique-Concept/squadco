@@ -3,8 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import crypto from "crypto";
+import { z } from "zod";
 
 import { callInternalApi } from "../lib/internal-api";
+import { prisma } from "../lib/server/prisma";
+import { supabaseAdmin } from "../lib/server/supabase-admin";
 import { createClient } from "../lib/supabase/server";
 
 function isRedirectError(error: unknown) {
@@ -41,7 +45,7 @@ export async function signInAction(formData: FormData) {
     .maybeSingle();
 
   if (!profile) {
-    redirect("/login?error=Signed%20in%20but%20no%20dashboard%20profile%20exists%20in%20public.users");
+    redirect("/onboarding");
   }
 
   const userSecurity = profile?.user_security as { totp_enabled?: boolean } | Array<{ totp_enabled?: boolean }> | null | undefined;
@@ -61,6 +65,54 @@ export async function signInAction(formData: FormData) {
   });
 
   redirect(profile?.role === "super_admin" ? "/admin" : "/dashboard");
+}
+
+export async function signUpAction(formData: FormData) {
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const password = String(formData.get("password") || "");
+  const fullName = String(formData.get("full_name") || "").trim();
+  const companyName = String(formData.get("company_name") || "").trim();
+  const country = String(formData.get("country") || "Nigeria").trim();
+  const supabase = await createClient();
+  const baseUrl = process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+  const callbackBase = baseUrl.endsWith("/api") ? baseUrl.slice(0, -4) : baseUrl;
+
+  const parsed = z.object({
+    email: z.string().email(),
+    password: z.string().min(8),
+    full_name: z.string().min(2),
+    company_name: z.string().min(2),
+    country: z.string().min(2)
+  }).safeParse({
+    email,
+    password,
+    full_name: fullName,
+    company_name: companyName,
+    country
+  });
+
+  if (!parsed.success) {
+    redirect("/signup?error=Please%20complete%20all%20required%20fields%20with%20valid%20values");
+  }
+
+  const { error } = await supabase.auth.signUp({
+    email: parsed.data.email,
+    password: parsed.data.password,
+    options: {
+      emailRedirectTo: `${callbackBase}/auth/callback?next=/onboarding`,
+      data: {
+        full_name: parsed.data.full_name,
+        company_name: parsed.data.company_name,
+        country: parsed.data.country
+      }
+    }
+  });
+
+  if (error) {
+    redirect(`/signup?error=${encodeURIComponent(error.message)}`);
+  }
+
+  redirect(`/verify-email?success=${encodeURIComponent("Check your email to verify your account and continue onboarding")}&email=${encodeURIComponent(parsed.data.email)}`);
 }
 
 export async function signOutAction() {
@@ -137,9 +189,14 @@ export async function updateProfilePasswordAction(formData: FormData) {
 export async function resendVerificationAction(formData: FormData) {
   const email = String(formData.get("email") || "");
   const supabase = await createClient();
+  const baseUrl = process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+  const callbackBase = baseUrl.endsWith("/api") ? baseUrl.slice(0, -4) : baseUrl;
   const { error } = await supabase.auth.resend({
     type: "signup",
-    email
+    email,
+    options: {
+      emailRedirectTo: `${callbackBase}/auth/callback?next=/onboarding`
+    }
   });
   if (error) {
     redirect(`/verify-email?error=${encodeURIComponent(error.message)}`);
@@ -429,6 +486,119 @@ export async function acceptInviteAction(formData: FormData) {
     if (isRedirectError(error)) throw error;
     redirect(`/invite/${encodeURIComponent(token)}?error=${encodeURIComponent(error instanceof Error ? error.message : "Failed to accept invite")}`);
   }
+}
+
+function slugifyOrganizationName(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || `org-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+export async function completeOnboardingAction(formData: FormData) {
+  const supabase = await createClient();
+  const { data: authData } = await supabase.auth.getUser();
+
+  if (!authData.user?.email) {
+    redirect("/login?error=Sign%20in%20to%20continue%20onboarding");
+  }
+
+  const existingProfile = await prisma.user.findUnique({
+    where: { id: authData.user.id }
+  });
+
+  if (existingProfile) {
+    redirect(existingProfile.role === "super_admin" ? "/admin" : "/dashboard");
+  }
+
+  const companyName = String(formData.get("company_name") || authData.user.user_metadata?.company_name || "").trim();
+  const country = String(formData.get("country") || authData.user.user_metadata?.country || "Nigeria").trim();
+  const fullName = String(formData.get("full_name") || authData.user.user_metadata?.full_name || "").trim();
+  const useCaseDescription = String(formData.get("use_case_description") || "").trim();
+  const requestedSlug = String(formData.get("slug") || "").trim();
+
+  const parsed = z.object({
+    company_name: z.string().min(2),
+    country: z.string().min(2),
+    full_name: z.string().min(2),
+    use_case_description: z.string().optional(),
+    slug: z.string().optional()
+  }).safeParse({
+    company_name: companyName,
+    country,
+    full_name: fullName,
+    use_case_description: useCaseDescription,
+    slug: requestedSlug
+  });
+
+  if (!parsed.success) {
+    redirect("/onboarding?error=Please%20complete%20all%20required%20fields");
+  }
+
+  let slug = parsed.data.slug ? slugifyOrganizationName(parsed.data.slug) : slugifyOrganizationName(parsed.data.company_name);
+  const slugExists = async (candidate: string) =>
+    prisma.organization.findUnique({ where: { slug: candidate }, select: { id: true } });
+
+  if (await slugExists(slug)) {
+    slug = `${slug}-${crypto.randomUUID().slice(0, 6)}`;
+  }
+
+  const org = await prisma.organization.create({
+    data: {
+      name: parsed.data.company_name,
+      slug,
+      plan: "starter",
+      status: "active",
+      country: parsed.data.country,
+      createdVia: "self_serve"
+    }
+  });
+
+  await prisma.$transaction([
+    prisma.user.create({
+      data: {
+        id: authData.user.id,
+        orgId: org.id,
+        role: "bank_admin",
+        fullName: parsed.data.full_name,
+        email: authData.user.email
+      }
+    }),
+    prisma.orgSetting.create({
+      data: {
+        orgId: org.id,
+        sandboxMode: true,
+        liveEnabled: false,
+        failOpenMode: "verify"
+      }
+    }),
+    prisma.billingEvent.create({
+      data: {
+        orgId: org.id,
+        eventType: "self_serve_signup",
+        amountKobo: BigInt(0),
+        status: "completed",
+        metadata: {
+          country: parsed.data.country,
+          use_case_description: parsed.data.use_case_description || null
+        }
+      }
+    })
+  ]);
+
+  await supabaseAdmin.auth.admin.updateUserById(authData.user.id, {
+    user_metadata: {
+      ...authData.user.user_metadata,
+      full_name: parsed.data.full_name,
+      company_name: parsed.data.company_name,
+      country: parsed.data.country,
+      onboarding_completed: true
+    }
+  });
+
+  revalidatePath("/dashboard");
+  redirect("/dashboard?success=Welcome%20to%20TrustLayer");
 }
 
 export async function uploadStatementAction(formData: FormData) {

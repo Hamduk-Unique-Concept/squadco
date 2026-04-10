@@ -23,10 +23,17 @@ model Organization {
   slug         String   @unique
   plan         String   @default("starter")
   status       String   @default("active")
+  country      String?
+  createdVia   String   @default("admin") @map("created_via")
   apiCallCount Int      @default(0) @map("api_call_count")
   monthlyLimit Int      @default(10000) @map("monthly_limit")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  // ── NEW COLUMNS ──
+  industry   String? @default("bank")
+  riskConfig Json?   @default("{}") @map("risk_config")
+
+  // ── EXISTING RELATIONS ──
   users          User[]
   apiKeys        ApiKey[]
   bankCustomers  BankCustomer[]
@@ -41,6 +48,11 @@ model Organization {
   backgroundJobs BackgroundJob[]
   failedJobs     FailedJob[]
   goLiveRequests GoLiveRequest[]
+
+  // ── NEW RELATIONS ──
+  assistantConversations AssistantConversation[]
+  webhookDeliveries      WebhookDelivery[]
+  squadSyncLogs          SquadSyncLog[]
 
   @@map("organizations")
   @@schema("public")
@@ -100,11 +112,15 @@ model BankCustomer {
   lastActivityAt      DateTime? @map("last_activity_at") @db.Timestamptz(6)
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  // ── EXISTING RELATIONS ──
   organization   Organization        @relation(fields: [orgId], references: [id])
   transactions   Transaction[]
   creditInputs   CreditInput[]
   trustHistory   TrustScoreHistory[]
   backgroundJobs BackgroundJob[]
+
+  // ── NEW RELATIONS ──
+  assistantConversations AssistantConversation[]
 
   @@unique([orgId, externalId])
   @@map("bank_customers")
@@ -129,6 +145,11 @@ model Transaction {
   aiExplanation String?  @map("ai_explanation")
   status        String   @default("pending")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // ── NEW COLUMNS ──
+  category            String?
+  squadTransactionRef String?  @map("squad_transaction_ref")
+  verifiedBySquad     Boolean? @default(false) @map("verified_by_squad")
 
   organization Organization @relation(fields: [orgId], references: [id])
   customer     BankCustomer @relation(fields: [customerId], references: [id])
@@ -196,7 +217,11 @@ model Webhook {
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  // ── EXISTING RELATIONS ──
   organization Organization @relation(fields: [orgId], references: [id])
+
+  // ── NEW RELATIONS ──
+  deliveries WebhookDelivery[]
 
   @@map("webhooks")
   @@schema("public")
@@ -230,6 +255,12 @@ model OrgSetting {
   squadEnabled           Boolean  @default(false) @map("squad_enabled")
   createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  // ── NEW COLUMNS ──
+  squadSecretKey     String? @map("squad_secret_key")
+  squadPublicKey     String? @map("squad_public_key")
+  squadEnvironment   String? @default("sandbox") @map("squad_environment")
+  squadWebhookSecret String? @map("squad_webhook_secret")
 
   organization Organization @relation(fields: [orgId], references: [id])
 
@@ -285,7 +316,7 @@ model FailedJob {
   lastRetriedAt   DateTime? @map("last_retried_at") @db.Timestamptz(6)
 
   backgroundJob BackgroundJob? @relation(fields: [backgroundJobId], references: [id])
-  organization  Organization? @relation(fields: [orgId], references: [id])
+  organization  Organization?  @relation(fields: [orgId], references: [id])
 
   @@map("failed_jobs")
   @@schema("public")
@@ -326,5 +357,75 @@ model GoLiveRequest {
   reviewer     User?        @relation("ReviewedBy", fields: [reviewedBy], references: [id])
 
   @@map("go_live_requests")
+  @@schema("public")
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// NEW MODELS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+model AssistantConversation {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId            String   @map("org_id") @db.Uuid
+  customerId       String   @map("customer_id") @db.Uuid
+  message          String
+  reply            String
+  detectedLanguage String?  @default("english") @map("detected_language")
+  modelUsed        String?  @map("model_used")
+  fallbackLevel    Int?     @default(0) @map("fallback_level")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  customer     BankCustomer @relation(fields: [customerId], references: [id])
+
+  @@map("assistant_conversations")
+  @@schema("public")
+}
+
+model MerchantCategory {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  merchantName  String   @unique @map("merchant_name")
+  category      String
+  categorizedBy String?  @default("llm") @map("categorized_by")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("merchant_categories")
+  @@schema("public")
+}
+
+model WebhookDelivery {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  webhookId     String    @map("webhook_id") @db.Uuid
+  orgId         String    @map("org_id") @db.Uuid
+  event         String
+  payload       Json      @default("{}")
+  status        String?   @default("pending")
+  attempts      Int?      @default(0)
+  lastAttemptAt DateTime? @map("last_attempt_at") @db.Timestamptz(6)
+  nextRetryAt   DateTime? @map("next_retry_at") @db.Timestamptz(6)
+  responseCode  Int?      @map("response_code")
+  error         String?
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  webhook      Webhook      @relation(fields: [webhookId], references: [id])
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@map("webhook_deliveries")
+  @@schema("public")
+}
+
+model SquadSyncLog {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId               String   @map("org_id") @db.Uuid
+  syncType            String?  @map("sync_type")
+  transactionsFetched Int?     @default(0) @map("transactions_fetched")
+  transactionsNew     Int?     @default(0) @map("transactions_new")
+  status              String?  @default("success")
+  error               String?
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@map("squad_sync_logs")
   @@schema("public")
 }
