@@ -27,6 +27,8 @@ model Organization {
   slug         String   @unique
   plan         String   @default("starter")
   status       String   @default("active")
+  country      String?
+  createdVia   String   @default("admin") @map("created_via")
   apiCallCount Int      @default(0) @map("api_call_count")
   monthlyLimit Int      @default(10000) @map("monthly_limit")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)

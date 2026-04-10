@@ -21,7 +21,10 @@ export default function LoginPage({
           <input className="w-full rounded-2xl border border-[var(--line)] bg-white px-4 py-3" placeholder="Email" name="email" />
           <input className="w-full rounded-2xl border border-[var(--line)] bg-white px-4 py-3" placeholder="Password" type="password" name="password" />
           <button className="w-full rounded-2xl bg-[var(--ink)] px-4 py-3 text-white" type="submit">Sign in</button>
-          <button className="w-full rounded-2xl border border-[var(--line)] px-4 py-3" type="button">Accept invite</button>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <a className="w-full rounded-2xl border border-[var(--line)] px-4 py-3 text-center" href="/signup">Create account</a>
+            <a className="w-full rounded-2xl border border-[var(--line)] px-4 py-3 text-center" href="/forgot-password">Forgot password</a>
+          </div>
           {searchParams?.error ? (
             <p className="text-sm text-[var(--coral)]">{decodeURIComponent(searchParams.error)}</p>
           ) : null}
